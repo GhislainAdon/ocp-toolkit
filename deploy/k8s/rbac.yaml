@@ -1,0 +1,51 @@
+# RBAC pour exécuter ocptk validate DEPUIS le cluster (Job/CronJob).
+# Périmètre minimal : lecture nodes/MCP + gestion du namespace de test.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ocptk-system
+  labels:
+    app.kubernetes.io/managed-by: ocp-toolkit
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ocptk-runner
+  namespace: ocptk-system
+  labels:
+    app.kubernetes.io/managed-by: ocp-toolkit
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocptk-runner
+  labels:
+    app.kubernetes.io/managed-by: ocp-toolkit
+rules:
+- apiGroups: [""]
+  resources: [nodes]
+  verbs: [get, list]
+- apiGroups: [machineconfiguration.openshift.io]
+  resources: [machineconfigpools]
+  verbs: [get, list]
+- apiGroups: [""]
+  resources: [namespaces, serviceaccounts, configmaps, pods, pods/log, persistentvolumeclaims]
+  verbs: ["*"]
+- apiGroups: [apps]
+  resources: [daemonsets]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ocptk-runner
+  labels:
+    app.kubernetes.io/managed-by: ocp-toolkit
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ocptk-runner
+subjects:
+- kind: ServiceAccount
+  name: ocptk-runner
+  namespace: ocptk-system

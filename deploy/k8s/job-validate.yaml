@@ -1,0 +1,29 @@
+# Validation lancée DANS le cluster — utile quand le poste opérateur n'a pas
+# d'accès direct (air-gap, bastion). Les rapports sont copiés depuis le pod :
+#   oc apply -f deploy/k8s/rbac.yaml -f deploy/k8s/job-validate.yaml
+#   oc wait -n ocptk-system --for=condition=complete job/ocptk-validate --timeout=30m
+#   oc cp ocptk-system/$(oc get pod -n ocptk-system -l job-name=ocptk-validate -o name | cut -d/ -f2):/work/reports ./reports
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ocptk-validate
+  namespace: ocptk-system
+  labels:
+    app.kubernetes.io/managed-by: ocp-toolkit
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: ocp-toolkit
+    spec:
+      serviceAccountName: ocptk-runner
+      restartPolicy: Never
+      containers:
+      - name: ocptk
+        image: ghislainadon/ocp-toolkit:latest   # ou <mirror>/ocp-toolkit:latest en air-gap
+        args: ["validate", "--confirm", "--tolerate-all"]
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: "1", memory: 512Mi}
