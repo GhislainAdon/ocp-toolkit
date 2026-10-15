@@ -2,8 +2,8 @@
 # Contient ocptk + oc : utilisable depuis n'importe quel poste avec Docker/Podman,
 # ou en Job/CronJob dans le cluster (voir deploy/k8s/).
 #
-#   docker build -t ghislainadon/ocp-toolkit:0.1.0 .
-#   docker run --rm -it -v ~/.kube:/root/.kube -v $PWD/reports:/work/reports ghislainadon/ocp-toolkit:0.1.0 validate
+#   docker build -t adon1996/ocp-toolkit:0.1.0 .
+#   docker run --rm -it -v ~/.kube:/root/.kube -v $PWD/reports:/work/reports adon1996/ocp-toolkit:0.1.0 validate
 
 FROM golang:1.24 AS build
 WORKDIR /src

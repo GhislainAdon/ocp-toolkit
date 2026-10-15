@@ -1,6 +1,6 @@
 # ocp-toolkit — cibles de build. `make help` pour la liste.
 VERSION ?= 0.1.0
-IMAGE   ?= ghislainadon/ocp-toolkit
+IMAGE   ?= adon1996/ocp-toolkit
 LDFLAGS  = -s -w -X github.com/GhislainAdon/ocp-toolkit/internal/cli.Version=$(VERSION)
 
 .PHONY: help build test release docker docker-push clean

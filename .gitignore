@@ -1,7 +1,26 @@
+# build output
 bin/
+dist/
+*.exe
+
+# runtime artefacts produced by ocptk (may contain cluster data / secrets)
 logs/
 reports/
 generated/
 manifests/validate/
-*.exe
+sandbox-run/
+.sandbox-kube/
+*.log
+
+# credentials — never commit
 pull-secret.json
+kubeconfig
+*.kubeconfig
+.env
+.env.*
+
+# misc
+linkedin_post*.txt
+.DS_Store
+.idea/
+.vscode/

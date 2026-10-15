@@ -22,7 +22,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: ocptk
-        image: ghislainadon/ocp-toolkit:latest   # ou <mirror>/ocp-toolkit:latest en air-gap
+        image: adon1996/ocp-toolkit:latest   # ou <mirror>/ocp-toolkit:latest en air-gap
         args: ["validate", "--confirm", "--tolerate-all"]
         resources:
           requests: {cpu: 100m, memory: 128Mi}
