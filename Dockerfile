@@ -5,7 +5,7 @@
 #   docker build -t adon1996/ocp-toolkit:0.1.0 .
 #   docker run --rm -it -v ~/.kube:/root/.kube -v $PWD/reports:/work/reports adon1996/ocp-toolkit:0.1.0 validate
 
-FROM golang:1.24 AS build
+FROM golang:1.26 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

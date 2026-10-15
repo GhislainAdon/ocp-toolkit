@@ -17,7 +17,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          # go.mod declares the minimum (1.24); build with a supported toolchain
+          go-version: '1.26'
 
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
@@ -31,7 +32,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.1
+          version: v2.14
 
       - name: Cross-compile release binaries
         run: make release VERSION=${GITHUB_SHA::7}

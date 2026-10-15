@@ -1,7 +1,7 @@
 # ocp-toolkit (`ocptk`)
 
 [![CI](https://github.com/GhislainAdon/ocp-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/GhislainAdon/ocp-toolkit/actions/workflows/ci.yml)
-![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)
+![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go)
 ![OpenShift](https://img.shields.io/badge/OpenShift-4.x-EE0000?logo=redhatopenshift)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -123,7 +123,7 @@ ocptk migrate --from-cluster --namespaces shop,billing \
 
 ## Tech stack
 
-- **Go 1.24**, [cobra](https://github.com/spf13/cobra), `gopkg.in/yaml.v3`; no other dependencies, static binary (`CGO_ENABLED=0`)
+- **Go 1.24+** (built with 1.26), [cobra](https://github.com/spf13/cobra), `gopkg.in/yaml.v3`; no other dependencies, static binary (`CGO_ENABLED=0`)
 - **OpenShift 4.x / Kubernetes**: `oc`, SCC `restricted-v2`, MachineConfig, Routes, Agent-based Installer
 - **Kustomize / Argo CD**-ready output
 - **Container**: multi-stage build to UBI 9 minimal + `oc` from `origin-cli`
