@@ -127,7 +127,7 @@ ocptk migrate --from-cluster --namespaces shop,billing \
 - **OpenShift 4.x / Kubernetes**: `oc`, SCC `restricted-v2`, MachineConfig, Routes, Agent-based Installer
 - **Kustomize / Argo CD**-ready output
 - **Container**: multi-stage build to UBI 9 minimal + `oc` from `origin-cli`
-- **CI**: GitHub Actions with gofmt, `go vet`, `go test -race`, golangci-lint, cross-compilation, Docker build and a Trivy image scan
+- **CI**: GitHub Actions with gofmt, `go vet`, `go test -race`, golangci-lint, cross-compilation, Docker build and a Trivy image scan (gating)
 
 ### Why Go rather than Python?
 

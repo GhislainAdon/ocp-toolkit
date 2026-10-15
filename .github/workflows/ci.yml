@@ -67,6 +67,7 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          # report-only: the image embeds the upstream `oc` binary whose CVEs
-          # are outside this project's control. Flip to '1' to gate merges.
-          exit-code: '0'
+          # Gate on our own layers (UBI base + ocptk). The upstream `oc` binary
+          # copied from origin-cli is tracked separately (CVEs fixed upstream).
+          skip-files: /usr/bin/oc
+          exit-code: '1'
