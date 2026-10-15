@@ -1,240 +1,176 @@
 # ocp-toolkit (`ocptk`)
 
-Outil CLI d'assistance à la **migration de nœuds Kubernetes vanilla vers Red Hat
-OpenShift 4.x à grande échelle (5000+ nœuds)**. Trois modules, pilotables par
-menu interactif ou en sous-commandes pour la CI/CD.
+[![CI](https://github.com/GhislainAdon/ocp-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/GhislainAdon/ocp-toolkit/actions/workflows/ci.yml)
+![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)
+![OpenShift](https://img.shields.io/badge/OpenShift-4.x-EE0000?logo=redhatopenshift)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-```
-=== OpenShift Migration Toolkit (ocptk) ===
-1) Validation des nœuds migrés            (tests + rapport)
-2) Provisioning cluster OpenShift 4.x     (génération config + install)
-3) Migration d'applications K8s → OpenShift
-q) Quitter
+> A single static Go binary that helps platform teams **move workloads and nodes from vanilla Kubernetes to Red Hat OpenShift 4.x at scale**: validate migrated nodes, generate installer configs, and convert K8s manifests into OpenShift-ready, GitOps-friendly Kustomize trees.
+
+[Résumé en français](#résumé-en-français) · [Documentation complète en français](docs/README.fr.md)
+
+---
+
+## The problem
+
+Migrating a large Kubernetes estate (thousands of nodes) to OpenShift fails in predictable places:
+
+- workloads that hard-code `runAsUser` / `fsGroup` are **rejected by the `restricted-v2` SCC**;
+- `Ingress` objects, `NodePort` services and public image registries need rewriting (Routes, ClusterIP, internal mirror);
+- after each migration wave, someone has to prove that **every node** is healthy (DNS, pod-to-pod, registry, SELinux, CSI), and sequential checks don't scale to 5,000 nodes;
+- air-gapped installs need a correct `install-config.yaml` / `agent-config.yaml` with mirror and trust-bundle sections.
+
+`ocptk` packages these checks and transformations into one tool with **dry-run by default**, idempotent `apply`, and timestamped JSON / HTML / JUnit reports.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Operator["Operator workstation / bastion / CI"]
+        CLI["ocptk CLI<br/>(menu or subcommands)"]
+    end
+
+    CLI -->|validate| V["Validate module"]
+    CLI -->|provision| P["Provision module"]
+    CLI -->|migrate| M["Migrate module"]
+
+    V -->|"1 API call for all nodes<br/>(Ready, CRI-O, MCO, taints)"| OCP[("OpenShift 4.x cluster")]
+    V -->|"smoke-test DaemonSet<br/>(DNS, pod-to-pod, registry,<br/>SELinux, SCC, egress)"| OCP
+    V -->|"sampled PVC tests"| OCP
+
+    P -->|"install-config.yaml<br/>agent-config.yaml"| INST["openshift-install<br/>(Agent-based Installer)"]
+
+    SRC[("Source K8s cluster<br/>or YAML folder")] --> M
+    M -->|"Ingress to Route, SCC fixes,<br/>image rewrite, NodePort to ClusterIP"| GITOPS["Kustomize tree<br/>per project / app"]
+    GITOPS -->|"oc apply -k / Argo CD"| OCP
+
+    V --> R["Reports<br/>JSON, HTML, JUnit<br/>+ diff vs previous wave"]
+    M --> R
 ```
 
-## Démarrage rapide (5 minutes, validé sur un cluster OpenShift réel)
+`ocptk` deliberately shells out to `oc` / `kubectl` (no client-go) so it behaves exactly like the operator's CLI, honours existing kubeconfigs and works behind registry mirrors.
+
+## Features
+
+| Module | What it does |
+|---|---|
+| **`validate`** | Control-plane checks in one API call (Ready, pressure, CRI-O runtime, MachineConfig state, role labels/taints) **plus an in-node smoke-test DaemonSet** running under `restricted-v2` (DNS, service network, cross-node pod-to-pod, internal registry, egress, SELinux `container_t`, effective SCC). Optional sampled CSI PVC tests. Parallel log collection (`--parallel`, default 30). Degrades gracefully without `cluster-reader`. |
+| **`provision`** | Interactive wizard (or `--answers file.yaml` for CI) generating a validated `install-config.yaml`, an `agent-config.yaml` skeleton, an install README and a replayable answers file (secrets excluded, `0600` permissions). Air-gap sections (`imageDigestSources`, `additionalTrustBundle`) when a mirror is declared. |
+| **`migrate`** | Reads a YAML folder **or** a live cluster and emits a per-project / per-application **Kustomize** tree ready for Argo CD: `Ingress` to `Route`, namespace to project annotations, SCC detection and `--fix-scc`, image rewrite / `--registry-mirror`, `NodePort` to `ClusterIP` (`--fix-nodeport`), storage-class mapping. Privileged / hostPath / hostNetwork are **always flagged, never auto-fixed**. |
+| **Cross-cutting** | `--dry-run` by default, `--confirm` to act; idempotent (`apply` + `app.kubernetes.io/managed-by: ocp-toolkit`); structured logs in `./logs/`; reports in JSON + HTML + JUnit with a **wave-to-wave diff** (regressions, new failures, fixes). |
+
+Validated end-to-end on a **Red Hat Developer Sandbox** cluster: a legacy app with a hard-coded `runAsUser` was rejected by the SCC, `ocptk migrate --fix-scc` rewrote it, `oc apply -k` brought it to `1/1 READY` with a Route, and `validate` covered all 11 nodes through the DaemonSet without `cluster-reader`.
+
+## Quickstart
+
+### Container image (bundles `oc`, nothing else to install)
 
 ```bash
-# 1. Récupérer l'outil (l'image embarque oc — rien d'autre à installer)
-docker pull adon1996/ocp-toolkit:latest
+docker pull adon1996/ocp-toolkit:latest     # or: docker build -t adon1996/ocp-toolkit:latest .
 
-# 2. Se connecter au cluster (console OpenShift → user → "Copy login command")
+# Log in (OpenShift console -> your user -> "Copy login command")
 mkdir -p .kube work
 docker run --rm -v "$PWD/.kube:/root/.kube" --entrypoint oc adon1996/ocp-toolkit:latest \
-  login --token=sha256~XXXX --server=https://api.<cluster>:6443
+  login --token=<token> --server=https://api.<cluster>:6443
 
-# 3. État des lieux sans risque (dry-run, lecture seule) + rapport HTML
+# Read-only health check + HTML report
 docker run --rm -v "$PWD/.kube:/root/.kube" -v "$PWD/work:/work" \
   adon1996/ocp-toolkit:latest validate
-# → work/reports/validate-<ts>/report.html
+# -> work/reports/validate-<ts>/report.html
 
-# 4. Exporter et transformer les applis d'un namespace en Kustomize GitOps
+# Export a namespace and convert it to an OpenShift-ready Kustomize tree
 docker run --rm -v "$PWD/.kube:/root/.kube" -v "$PWD/work:/work" \
-  adon1996/ocp-toolkit:latest migrate --from-cluster --namespaces mon-app \
+  adon1996/ocp-toolkit:latest migrate --from-cluster --namespaces my-app \
   --fix-scc --fix-nodeport --confirm
-# → work/generated/migrate/<projet>/<app>/base/ + README par appli
 
-# 5. Déployer les manifestes corrigés
-oc apply -k work/generated/migrate/<projet>/<app>/base
+oc apply -k work/generated/migrate/<project>/<app>/base
 ```
 
-**Démo réalisée sur Red Hat Developer Sandbox** : une appli legacy avec
-`runAsUser` en dur est rejetée par la SCC (`unable to validate against any
-security context constraint`) → `ocptk migrate --fix-scc` la transforme →
-`oc apply -k` → **1/1 READY + Route créée**. Le module validate a couvert les
-11 nœuds du cluster via son DaemonSet (SCC restricted-v2, SELinux, DNS,
-registre interne : PASS), même sans droit `cluster-reader`.
-
-## Pourquoi Go (et pas Python)
-
-Le cahier des charges initial visait Python ; l'implémentation est en **Go**,
-à périmètre fonctionnel identique, pour des raisons opérationnelles :
-
-| Critère | Go | Python |
-|---|---|---|
-| Déploiement chez le client | **1 binaire statique** (`scp` et c'est fini) | Python 3.11 + venv + pip install (souvent interdit en air-gap) |
-| Air-gapped | binaire ou image OCI auto-suffisants | miroir PyPI à monter |
-| Image conteneur | ~30 Mo (ubi-minimal + binaire) | 150-400 Mo |
-| Parallélisme (collecte 5000 nœuds) | goroutines natives | threads/asyncio plus lourds |
-| Écosystème cible | kubectl, oc, openshift-install, ArgoCD… sont en Go | — |
-
-Le contrat de la spec est respecté à l'identique : commande `ocptk`, menu à 3
-modules, `--dry-run` par défaut / `--confirm` pour exécuter, idempotence
-(`apply` + label `app.kubernetes.io/managed-by: ocp-toolkit`), rapports
-horodatés JSON + HTML + JUnit, option `--registry-mirror` partout, logs
-structurés dans `./logs/`.
-
-## Installation
-
-**Binaire** (poste opérateur ou bastion) :
+### From source
 
 ```bash
-make build            # bin/ocptk pour l'OS courant
-make release          # linux/amd64+arm64, windows, darwin
+make build        # bin/ocptk for the current OS
+make test         # go vet + unit tests
+make release      # linux/amd64+arm64, windows/amd64, darwin/arm64
+./bin/ocptk       # interactive menu
 ```
 
-**Docker / Podman** (aucune installation sur le poste — l'image embarque `oc`) :
-
-```bash
-docker build -t ghislainadon/ocp-toolkit:latest .
-docker run --rm -it \
-  -v ~/.kube:/root/.kube \
-  -v "$PWD:/work" \
-  ghislainadon/ocp-toolkit:latest validate
-```
-
-**Dans le cluster** (Job — pour les environnements sans accès direct) :
+### In-cluster (Job)
 
 ```bash
 oc apply -f deploy/k8s/rbac.yaml -f deploy/k8s/job-validate.yaml
 ```
 
-**Air-gapped** : pousser l'image dans le registre miroir
-(`oc image mirror ghislainadon/ocp-toolkit:latest <mirror>/ocp-toolkit:latest`),
-puis passer `--registry-mirror <mirror>` aux commandes — l'image des pods de
-test et les références d'images migrées sont réécrites automatiquement.
-
-## Sécurité et idempotence (règles transverses)
-
-- **Dry-run par défaut** : toute action touchant un cluster exige `--confirm`.
-- **Idempotent** : uniquement `kubectl/oc apply` (jamais `create`), ressources
-  étiquetées `app.kubernetes.io/managed-by: ocp-toolkit`, relançable à chaque
-  vague sans duplication.
-- **Logs** : chaque exécution écrit `logs/ocptk-<timestamp>.log` (commandes
-  exécutées incluses).
-
----
-
-## Module 1 — `ocptk validate`
-
-Valide que chaque nœud migré est pleinement fonctionnel sous OpenShift.
-
-**Architecture d'échelle** : jamais de test séquentiel nœud par nœud.
-
-1. **Checks plan de contrôle** (1 appel API pour 5000 nœuds) : nœud `Ready`,
-   pressions ressources, runtime **CRI-O**, état **MachineConfig** (annotations
-   MCO + synthèse des MachineConfigPools), labels/taints par rôle.
-2. **Checks in-node** via un **DaemonSet de smoke-test** (un pod par nœud, SCC
-   `restricted-v2` volontairement — c'est un des checks) : résolution DNS +
-   réseau de services, **pod-à-pod inter-nœuds** (connexion aux pods CoreDNS
-   d'autres nœuds), registre interne, egress (`--egress-target host:port`),
-   **SELinux** (contexte `container_t`), **SCC effective** (downward API).
-   Chaque pod imprime un résultat JSON ; l'orchestrateur collecte les logs en
-   parallèle (`--parallel`, défaut 30).
-3. **Stockage CSI échantillonné** (`--pvc-storageclass <sc> --pvc-sample 5`) :
-   création + montage + écriture d'un PVC de test sur N nœuds, puis nettoyage.
-   Échantillonné sciemment : 5000 PVC simultanés écrouleraient le stockage.
-4. **Conformance cluster** : `--opct` guide/oriente vers OPCT (Sonobuoy +
-   openshift-tests) pour la conformance globale, complémentaire du par-nœud.
-
-**RBAC restreint** (testé sur Red Hat Developer Sandbox) : si l'opérateur ne
-peut pas lister les nœuds (`cluster-reader` absent), les checks API sont
-ignorés proprement et le rapport se construit depuis les résultats des pods.
-Si le namespace cible existe déjà (`--namespace <projet>`), il est réutilisé
-sans être ni modifié ni supprimé — seules les ressources ocptk sont nettoyées.
-
-**Rapports** : `reports/validate-<timestamp>/` — `report.json` (machine),
-`report.html` (chef d'équipe), `junit.xml` (CI) + **diff avec la vague
-précédente** (régressions, nouveaux échecs, corrections, persistants).
+### More examples
 
 ```bash
-ocptk validate                                  # dry-run : checks API + validation manifestes
-ocptk validate --confirm --tolerate-all         # exécution réelle, tous les nœuds
+ocptk validate --confirm --tolerate-all
 ocptk validate --confirm --node-selector node-role.kubernetes.io/worker= \
   --pvc-storageclass ocs-storagecluster-ceph-rbd --egress-target proxy.corp:3128
-```
-
-## Module 2 — `ocptk provision`
-
-Assistant interactif (ou `--answers reponses.yaml` pour la CI) qui génère dans
-`generated/install-<cluster>/` :
-
-- `install-config.yaml` (validé : CIDR, VIPs, pull-secret JSON, clé SSH…)
-- `agent-config.yaml` (**Agent-based Installer** — méthode privilégiée
-  bare-metal/air-gapped), squelette `hosts:` à compléter
-- `README-install.md` (prérequis : binaires, DNS, LB, NTP…) et `.gitignore`
-  (l'install-config contient le pull-secret : jamais dans Git, mode 0600)
-- `answers.yaml` rejouable (sans les secrets)
-
-Air-gapped : section `imageDigestSources` + `additionalTrustBundle` générées si
-un registre miroir est déclaré. Avec `--confirm` et `openshift-install` présent,
-l'outil enchaîne sur `agent create image` puis affiche les `wait-for`.
-
-## Module 3 — `ocptk migrate`
-
-Transforme des ressources K8s vanilla (dossier YAML **ou** cluster source) en
-manifestes OpenShift propres, organisés **par projet et par application** en
-structure **Kustomize** directement consommable par ArgoCD :
-
-```
-generated/migrate/<projet>/
-├── kustomization.yaml            # namespace + applications
-├── namespace.yaml                # annoté projet OpenShift
-└── <application>/
-    ├── README.md                 # transformations + points de revue humaine
-    └── base/
-        ├── kustomization.yaml
-        └── *.yaml
-```
-
-Transformers (unitaires, testés — `go test ./...`) :
-
-- `Ingress` → `Route` (host, path, TLS edge, backend ; warning sur les
-  certificats à reporter)
-- `Namespace` → annotations projet OpenShift
-- **SCC / restricted-v2** (piège n°1) : `runAsUser`/`fsGroup` en dur détectés
-  (corrigés avec `--fix-scc`) ; `privileged`, `hostNetwork`, `hostPath`,
-  capabilities → **toujours WARN, jamais auto-corrigés**
-- Images → réécriture registre interne/miroir (`--image-rewrite src=dst`,
-  répétable ; `--registry-mirror` préfixe docker.io/quay.io/registry.k8s.io)
-- `Service NodePort` → signalé, converti ClusterIP avec `--fix-nodeport`
-- `PVC` → mapping `--storage-class-map gp2=ocs-…` ; ConfigMap/Secret conservés
-  (warning re-chiffrement GitOps pour les Secrets)
-
-**Positionnement** : OpenShift a déjà un contrôleur Ingress→Route à la volée,
-et Red Hat fournit **MTC (Migration Toolkit for Containers) / Crane** pour la
-migration d'état et de volumes. Cet outil ne réinvente pas la migration de
-données : il produit des manifestes GitOps de première classe et signale ce qui
-relève de MTC/Crane.
-
-```bash
+ocptk provision --answers answers.yaml
 ocptk migrate --source-dir ./exports --fix-scc --fix-nodeport --confirm
 ocptk migrate --from-cluster --namespaces shop,billing \
   --image-rewrite docker.io=registry.apps.ocp.corp/mirror --confirm
 ```
 
-Rapport : `reports/migrate-<timestamp>/` (JSON + HTML + JUnit), synthèse par
-application avec les WARN à traiter.
+## Screenshots
+
+> _Placeholders, to be added (see [docs/screenshots](docs/screenshots/))._
+
+| Interactive menu | `validate` HTML report | `migrate` report |
+|---|---|---|
+| `docs/screenshots/menu.png` | `docs/screenshots/validate-report.png` | `docs/screenshots/migrate-report.png` |
+
+## Tech stack
+
+- **Go 1.24**, [cobra](https://github.com/spf13/cobra), `gopkg.in/yaml.v3`; no other dependencies, static binary (`CGO_ENABLED=0`)
+- **OpenShift 4.x / Kubernetes**: `oc`, SCC `restricted-v2`, MachineConfig, Routes, Agent-based Installer
+- **Kustomize / Argo CD**-ready output
+- **Container**: multi-stage build to UBI 9 minimal + `oc` from `origin-cli`
+- **CI**: GitHub Actions with gofmt, `go vet`, `go test -race`, golangci-lint, cross-compilation, Docker build and a Trivy image scan
+
+### Why Go rather than Python?
+
+A single static binary is easy to ship to an air-gapped bastion (no venv, no PyPI mirror). The image adds only a small binary on top of UBI. Goroutines make it cheap to collect results from thousands of DaemonSet pods, and most OpenShift tooling (`oc`, `openshift-install`, Argo CD) is written in Go.
+
+## Project layout
+
+```
+cmd/ocptk/                 entrypoint
+internal/cli/              interactive menu + cobra subcommands
+internal/common/           kube (oc wrapper), logging, report (JSON/HTML/JUnit/diff), ui
+internal/validate/         module 1: API checks + embedded smoke-test DaemonSet
+internal/provision/        module 2: embedded installer templates
+internal/migrate/          module 3: export + transform/ (unit-tested transformers)
+deploy/k8s/                RBAC + Job for in-cluster runs
+```
+
+## Roadmap
+
+- [ ] Publish multi-arch images and release binaries from tagged releases (GoReleaser)
+- [ ] Unit tests for `validate` result parsing and `provision` template rendering
+- [ ] Optional `client-go` backend for environments without `oc`
+- [ ] Secret handling in `migrate`: emit SealedSecrets / ExternalSecrets instead of plain `Secret` manifests
+- [ ] Prometheus metrics / OpenTelemetry export for wave dashboards
+- [ ] Integration with MTC / Crane for stateful volume migration
+
+## Security notes
+
+- `migrate --from-cluster` can export `Secret` objects. Treat the `generated/` folder as sensitive (it is git-ignored).
+- `provision` writes the pull-secret to `install-config.yaml` with mode `0600` and a local `.gitignore`.
 
 ---
 
-## Arborescence
+## Résumé en français
 
-```
-ocp-toolkit/
-├── cmd/ocptk/               # main
-├── internal/
-│   ├── cli/                 # menu principal + sous-commandes (cobra)
-│   ├── common/
-│   │   ├── kube/            # wrapper oc/kubectl (shell-out volontaire)
-│   │   ├── logging/         # log fichier structuré
-│   │   ├── report/          # JSON + HTML + JUnit + diff entre vagues
-│   │   └── ui/              # prompts, tableaux, couleurs (zéro dépendance)
-│   ├── validate/            # MODULE 1 (DaemonSet embarqué)
-│   ├── provision/           # MODULE 2 (templates embarqués)
-│   └── migrate/             # MODULE 3 (+ transform/ testé unitairement)
-├── deploy/k8s/              # RBAC + Job pour exécution in-cluster
-├── manifests/               # généré : DaemonSet de test rendu
-├── generated/               # généré : configs install, arborescences Kustomize
-├── reports/                 # généré : rapports horodatés
-└── logs/
-```
+**ocp-toolkit** est un outil CLI en Go (binaire statique unique) qui accompagne la **migration de Kubernetes vanilla vers OpenShift 4.x à grande échelle**. Il a trois modules :
 
-## Développement
+- **validate** : contrôles API et DaemonSet de smoke-test sur chaque nœud (DNS, pod-à-pod, registre, SELinux, SCC), avec rapports JSON/HTML/JUnit et diff entre vagues ;
+- **provision** : génération validée de `install-config.yaml` / `agent-config.yaml`, y compris en air-gap ;
+- **migrate** : conversion des manifestes K8s en arborescence Kustomize par projet et par application, prête pour Argo CD (Ingress→Route, corrections SCC, réécriture d'images, NodePort→ClusterIP).
 
-```bash
-make test      # go vet + tests unitaires (transformers, rapports/diff)
-make build     # binaire local
-# Sans Go installé :
-docker run --rm -v "$PWD:/src" -w /src golang:1.24 sh -c "go vet ./... && go test ./..."
-```
+L'outil fonctionne en dry-run par défaut, il est idempotent et il a été testé sur Red Hat Developer Sandbox. Documentation détaillée : [docs/README.fr.md](docs/README.fr.md).
+
+## License
+
+[MIT](LICENSE) © Ghislain Adon
