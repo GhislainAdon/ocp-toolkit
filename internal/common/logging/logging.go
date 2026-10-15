@@ -37,7 +37,7 @@ func (l *Logger) write(level, format string, a ...any) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	fmt.Fprintf(l.f, "%s %-5s %s\n", time.Now().Format(time.RFC3339), level, fmt.Sprintf(format, a...))
+	_, _ = fmt.Fprintf(l.f, "%s %-5s %s\n", time.Now().Format(time.RFC3339), level, fmt.Sprintf(format, a...))
 }
 
 // Info journalise en niveau INFO.

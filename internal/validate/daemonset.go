@@ -230,13 +230,13 @@ spec:
 `
 
 type dsParams struct {
-	Namespace       string
-	Image           string
-	DNSPodIPs       string
-	EgressTarget    string
-	TolerateAll     bool
-	NodeSelector    map[string]string
-	ScriptIndented  string
+	Namespace      string
+	Image          string
+	DNSPodIPs      string
+	EgressTarget   string
+	TolerateAll    bool
+	NodeSelector   map[string]string
+	ScriptIndented string
 }
 
 func renderManifests(p dsParams) ([]byte, error) {

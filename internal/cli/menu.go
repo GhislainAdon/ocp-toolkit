@@ -83,9 +83,7 @@ func menuMigrate() error {
 	if ui.Confirm("Lire depuis un cluster source ? (Non = dossier de manifestes YAML)") {
 		o.FromCluster = true
 		nsRaw := ui.PromptRequired("Namespaces à exporter (séparés par des virgules)")
-		for _, ns := range splitCSV(nsRaw) {
-			o.Namespaces = append(o.Namespaces, ns)
-		}
+		o.Namespaces = append(o.Namespaces, splitCSV(nsRaw)...)
 		g.confirm = true // lecture seule côté cluster ; l'écriture locale est confirmée plus bas
 		c, log, err := newKube(true)
 		if err != nil {

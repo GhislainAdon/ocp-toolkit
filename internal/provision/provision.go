@@ -38,25 +38,25 @@ type Options struct {
 // Answers regroupe toutes les réponses de l'assistant. Sérialisable en YAML
 // pour rejouer une génération en CI (--answers fichier.yaml).
 type Answers struct {
-	ClusterName    string   `yaml:"clusterName"`
-	BaseDomain     string   `yaml:"baseDomain"`
-	Platform       string   `yaml:"platform"` // baremetal | vsphere | none
-	Masters        int      `yaml:"masters"`
-	Workers        int      `yaml:"workers"`
-	MachineNetwork string   `yaml:"machineNetwork"`
-	ClusterNetwork string   `yaml:"clusterNetwork"`
-	HostPrefix     int      `yaml:"hostPrefix"`
-	ServiceNetwork string   `yaml:"serviceNetwork"`
-	APIVIP         string   `yaml:"apiVIP,omitempty"`
-	IngressVIP     string   `yaml:"ingressVIP,omitempty"`
-	RendezvousIP   string   `yaml:"rendezvousIP"`
-	PullSecretFile string   `yaml:"pullSecretFile,omitempty"`
-	PullSecret     string   `yaml:"pullSecret,omitempty"`
-	SSHKeyFile     string   `yaml:"sshKeyFile,omitempty"`
-	SSHKey         string   `yaml:"sshKey,omitempty"`
-	MirrorRegistry string   `yaml:"mirrorRegistry,omitempty"`
-	TrustBundleFile string  `yaml:"trustBundleFile,omitempty"`
-	NTPServers     []string `yaml:"ntpServers,omitempty"`
+	ClusterName     string   `yaml:"clusterName"`
+	BaseDomain      string   `yaml:"baseDomain"`
+	Platform        string   `yaml:"platform"` // baremetal | vsphere | none
+	Masters         int      `yaml:"masters"`
+	Workers         int      `yaml:"workers"`
+	MachineNetwork  string   `yaml:"machineNetwork"`
+	ClusterNetwork  string   `yaml:"clusterNetwork"`
+	HostPrefix      int      `yaml:"hostPrefix"`
+	ServiceNetwork  string   `yaml:"serviceNetwork"`
+	APIVIP          string   `yaml:"apiVIP,omitempty"`
+	IngressVIP      string   `yaml:"ingressVIP,omitempty"`
+	RendezvousIP    string   `yaml:"rendezvousIP"`
+	PullSecretFile  string   `yaml:"pullSecretFile,omitempty"`
+	PullSecret      string   `yaml:"pullSecret,omitempty"`
+	SSHKeyFile      string   `yaml:"sshKeyFile,omitempty"`
+	SSHKey          string   `yaml:"sshKey,omitempty"`
+	MirrorRegistry  string   `yaml:"mirrorRegistry,omitempty"`
+	TrustBundleFile string   `yaml:"trustBundleFile,omitempty"`
+	NTPServers      []string `yaml:"ntpServers,omitempty"`
 }
 
 type tmplData struct {

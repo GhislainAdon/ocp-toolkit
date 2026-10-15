@@ -160,8 +160,8 @@ func mcpNotes(c *kube.Client, rep *report.Report) {
 				Name string `json:"name"`
 			} `json:"metadata"`
 			Status struct {
-				MachineCount        int `json:"machineCount"`
-				UpdatedMachineCount int `json:"updatedMachineCount"`
+				MachineCount         int `json:"machineCount"`
+				UpdatedMachineCount  int `json:"updatedMachineCount"`
 				DegradedMachineCount int `json:"degradedMachineCount"`
 			} `json:"status"`
 		} `json:"items"`
